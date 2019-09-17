@@ -4,7 +4,8 @@ import os
 import time
 
 from qiniu import config
-from qiniu.utils import urlsafe_base64_encode, crc32, file_crc32, _file_iter, rfc_from_timestamp
+from qiniu.exceptions import UploadException
+from qiniu.utils import urlsafe_base64_encode, crc32, file_crc32, _file_iter, rfc_from_timestamp, etag
 from qiniu import http
 from .upload_progress_recorder import UploadProgressRecorder
 
@@ -44,7 +45,8 @@ def put_data(
 
 def put_file(up_token, key, file_path, params=None,
              mime_type='application/octet-stream', check_crc=False,
-             progress_handler=None, upload_progress_recorder=None, keep_last_modified=False):
+             progress_handler=None, upload_progress_recorder=None,
+             keep_last_modified=False, raise_exception=False):
     """上传文件到七牛
 
     Args:
@@ -53,9 +55,10 @@ def put_file(up_token, key, file_path, params=None,
         file_path:        上传文件的路径
         params:           自定义变量，规格参考 http://developer.qiniu.com/docs/v6/api/overview/up/response/vars.html#xvar
         mime_type:        上传数据的mimeType
-        check_crc:        是否校验crc32
+        check_crc:        是否校验crc32, 已弃用
         progress_handler: 上传进度
         upload_progress_recorder: 记录上传进度，用于断点续传
+        raise_exception:  上传后自动校验key和hash, 如果不一致就报错
 
     Returns:
         一个dict变量，类似 {"hash": "<Hash string>", "key": "<Key string>"}
@@ -77,6 +80,9 @@ def put_file(up_token, key, file_path, params=None,
             ret, info = _form_put(up_token, key, input_stream, params, mime_type,
                                   crc, progress_handler, file_name,
                                   modify_time=modify_time, keep_last_modified=keep_last_modified)
+    if raise_exception is True:
+        if (ret["key"] != key) or (ret["hash"] != etag(file_path)):
+            raise UploadException("数据校验不正确")
     return ret, info
 
 
